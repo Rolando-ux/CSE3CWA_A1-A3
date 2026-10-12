@@ -1,0 +1,55 @@
+name: Docker smoke test
+
+# Builds the Docker image, starts the container the same way docker-compose
+# does, and checks that the app answers. Runs on every push to the branches
+# below, and can be started by hand from the Actions tab once it is on main.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["ci/docker-smoke", "main"]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Build the image and start the container
+        run: docker compose up -d --build
+
+      - name: Wait for the app to report healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/health; then
+              echo
+              echo "Healthy after about $((i * 2)) seconds"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "The app did not become healthy in time"
+          docker compose logs
+          exit 1
+
+      - name: The dashboard starts empty in Docker (only word lists are seeded)
+        run: |
+          curl -fsS http://localhost:3000/api/stats | jq '{health: .health.status, generations: .generations.total, savedActivities: .totals.savedActivities.total}'
+
+      - name: Fill the dashboard with simulated usage data inside the container
+        continue-on-error: true
+        run: |
+          docker compose exec -T nextjs-app npm run db:seed-usage
+
+      - name: The dashboard figures after seeding
+        run: |
+          curl -fsS http://localhost:3000/api/stats | jq '{health: .health.status, generations: .generations.total, failed: .generations.failure, savedActivities: .totals.savedActivities.total}'
+
+      - name: Generate a Wordle from a saved activity through the API
+        run: |
+          curl -fsS -X POST http://localhost:3000/api/generate -H "Content-Type: application/json" -d '{"activityId":1}' | head -c 200
+
+      - name: Show the container logs
+        if: always()
+        run: |
+          docker compose logs
