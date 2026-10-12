@@ -147,14 +147,19 @@ Install dependencies:
 npm install
 ```
 
-Set up the database (creates `dev.db`, seeds the phoneme word corpus and saved
-activities, then the simulated usage records):
+Set up the database. This generates the Prisma client (it is not committed, and
+`migrate dev` does not create it), creates `dev.db`, then seeds the phoneme word
+corpus and saved activities, then the simulated usage records:
 
 ```bash
+npx prisma generate
 npx prisma migrate dev
 npm run db:seed
 npm run db:seed-usage
 ```
+
+The database defaults to `file:./dev.db`; set the `DATABASE_URL` environment
+variable to use a different SQLite file.
 
 Run the development server:
 
